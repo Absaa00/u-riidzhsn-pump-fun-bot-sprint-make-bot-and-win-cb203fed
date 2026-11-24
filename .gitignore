@@ -1,0 +1,19 @@
+# pumpfun-bot-sprint entry ignores — EarlyMomentum bot, Nov 2026
+# local node + editor artefacts only; the graded entry is main.ts + vendor/
+node_modules/
+dist/
+*.log
+grade-local/
+grade-output/
+scores.json
+result.json
+*.tar.gz
+transcripts.tar.gz
+bundle.tar.gz
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/
+*.local
