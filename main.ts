@@ -32,19 +32,24 @@ const MIN_BUY = 12_000_000n; // 0.012 SOL: above the 0.01 SOL round-trip floor
 const MIN_REAL_SOL = 3_000_000_000n; // need real reserves >= 3 SOL for a useful buy cap
 
 // --- entry: a young coin proving demand ------------------------------------
-const MAX_AGE_SLOTS = 1500; // coin created at most ~this many slots ago
+// v2: stricter entry (dev v1: 567 round trips, 27% win rate, -2.94 SOL —
+// the +10% entries caught too many fading tops). Demand a stronger run
+// before chasing, and let the winners run instead of capping them at +30%.
+const MAX_AGE_SLOTS = 1200; // coin created at most ~this many slots ago
 const MIN_TRADES = 5; // at least this many trades seen before trusting it
 const LOOKBACK = 12; // trades kept per coin for momentum + flow
-const MOMENTUM = 1.1; // price now vs the price at first sight
-const SHORT_MOMENTUM = 1.04; // price now vs 5 trades ago
-const FLOW_RATIO = 1.4; // buy SOL vs sell SOL over the lookback window
+const MOMENTUM = 1.15; // price now vs the price at first sight
+const SHORT_MOMENTUM = 1.05; // price now vs 5 trades ago
+const FLOW_RATIO = 1.6; // buy SOL vs sell SOL over the lookback window
 
-// --- exit: fixed targets, no hope-trading ----------------------------------
-const TAKE_PROFIT = 1.3; // sell when the mark value is +30% over cost
-const STOP_LOSS = 0.88; // sell when the mark value is -12% under cost
-const TRAIL_TRIGGER = 1.15; // trailing exit arms once the peak is +15%
-const TRAIL_DROP = 0.88; // ... then sell on a 12% fall from that peak
-const MAX_HOLD_SLOTS = 1800; // stale-position time stop
+// --- exit: cut losers fast, let runners run ---------------------------------
+// v2: no fixed take-profit — a runner is sold only on a trailing drop off
+// its peak, so one 2-10x coin can pay for many small -10% stops.
+const TAKE_PROFIT = 10.0; // effectively off; the trail exit banks runners
+const STOP_LOSS = 0.9; // sell when the mark value is -10% under cost
+const TRAIL_TRIGGER = 1.25; // trailing exit arms once the peak is +25%
+const TRAIL_DROP = 0.85; // ... then sell on a 15% fall from that peak
+const MAX_HOLD_SLOTS = 2400; // stale-position time stop
 const SELL_COOLDOWN_SLOTS = 600; // do not re-buy a coin just sold
 
 // --- guardrail pacing: the run needs >= 20 distinct round-tripped coins ---
