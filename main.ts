@@ -1,23 +1,21 @@
 // SPDX-License-Identifier: MIT
-// EarlySniper — a paper-money sniper bot for pump.fun-style bonding
+// EarlySniper v4 — a paper-money sniper bot for pump.fun-style bonding
 // curves, speaking agent-fun/replay/v2 through the kit's vendor shim.
 //
 // Idea, in one paragraph: on this tape the money is made at the bottom of
 // the curve, not by chasing strength. Coins that have already run +15%
 // keep fading (median 0.90x a few minutes later), while a coin bought
 // when its real SOL reserve first reaches ~1 SOL — price still near its
-// creation level — rides the crowd that arrives after it: a few coins run
-// 5-50x, most drift sideways, and a trailing exit banks the runners
-// while a time stop closes the rest. So the bot buys exactly once per
-// coin, as early as the harness's 1%-of-real-reserve buy cap allows a
-// useful size, and never uses a stop-loss (losers on this tape usually
-// recover toward entry before the time stop; cutting them at -10% only
-// locks the loss). Exits: a trailing drop off the peak once the peak is
-// +20%, or a time stop. One small buy per coin, at most five open
-// positions. Every decision comes only from the hello message and the
-// batches the harness sends (events, marks, fills, account); there is no
-// clock, no environment read, no randomness and no network, so the two
-// grading runs produce byte-identical action logs.
+// creation level — rides the crowd that arrives after it. v4 exits fast
+// instead of trailing runners: a fixed take-profit (+25%), a fixed
+// stop-loss (-15%) and a short time stop. The faithful replay sim ranked
+// this exit set least-bad on the dev window, and capping every loss at
+// -15% keeps drawdown small while the fast turnover cycles through many
+// coins. One small buy per coin, at most five open positions. Every
+// decision comes only from the hello message and the batches the harness
+// sends (events, marks, fills, account); there is no clock, no
+// environment read, no randomness and no network, so the two grading runs
+// produce byte-identical action logs.
 //
 // Money is paper only: 10 SOL of replay capital, zero real SOL moves.
 
@@ -45,12 +43,12 @@ const MAX_ENTRY_MULT = 1.5; // price now vs the price at first sight
 const MAX_AGE_SLOTS = 3600; // coin created at most ~this many slots ago
 const MIN_TRADES = 2; // at least this many trades seen before trusting it
 
-// --- exit: trail the runners, time-stop the rest ---------------------------
-// No stop-loss and no fixed take-profit: the trailing exit is what banks
-// a 5-50x runner, and the time stop is what closes a coin that never ran.
-const TRAIL_TRIGGER = 1.2; // trailing exit arms once the peak is +20%
-const TRAIL_DROP = 0.85; // ... then sell on a 15% fall from that peak
-const MAX_HOLD_SLOTS = 3600; // time stop: sell whatever it is worth by then
+// --- exit: fixed targets, fast turnover ------------------------------------
+// v4: take-profit +25%, stop-loss -15%, short time stop. No trailing exit:
+// the faithful replay sim ranked this exit set least-bad on the dev window.
+const TAKE_PROFIT = 1.25; // sell when the mark value is +25% over cost
+const STOP_LOSS = 0.85; // sell when the mark value is -15% under cost
+const MAX_HOLD_SLOTS = 1800; // time stop: sell whatever it is worth by then
 const SLIPPAGE_BPS = 500;
 
 interface Coin {
@@ -59,7 +57,6 @@ interface Coin {
   trades: number; // trades seen on this coin
   entered: boolean; // the bot already bought this coin once: never re-buy
   entrySlot: number; // slot the current position was first seen held
-  peakValue: bigint; // best mark value (lamports) while the position is held
 }
 
 const coins = new Map<string, Coin>();
@@ -73,7 +70,6 @@ function coinFor(mint: string): Coin {
       trades: 0,
       entered: false,
       entrySlot: -1,
-      peakValue: 0n,
     };
     coins.set(mint, c);
   }
@@ -121,16 +117,12 @@ await runBot({
       if (c.entrySlot < 0) c.entrySlot = batch.slot;
       const value = markValue(state, mint, holding.token_amount);
       if (value <= 0n) continue;
-      if (value > c.peakValue) c.peakValue = value;
       const cost = holding.cost_lamports;
 
-      const peakUp = Number(c.peakValue) / Number(cost);
-      const trailing =
-        peakUp >= TRAIL_TRIGGER &&
-        Number(value) <= Number(c.peakValue) * TRAIL_DROP;
+      const up = Number(value) / Number(cost);
       const stale = batch.slot - c.entrySlot > MAX_HOLD_SLOTS;
 
-      if (trailing || stale) {
+      if (up >= TAKE_PROFIT || up <= STOP_LOSS || stale) {
         if (hasPending(state, mint, 'sell')) continue;
         orders.push({
           side: 'sell',
@@ -139,7 +131,6 @@ await runBot({
           max_slippage_bps: SLIPPAGE_BPS,
         });
         c.entrySlot = -1;
-        c.peakValue = 0n;
       }
     }
 
